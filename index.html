@@ -1,169 +1,133 @@
 from flask import Flask, request, jsonify, render_template_string
 import re
-import math
 
 app = Flask(__name__)
 
-# --- ЛОГИКА АНАЛИЗА (МАКСИМАЛЬНАЯ СКОРОСТЬ) ---
-def analyze_text_logic(text):
-    sentences = re.split(r'[.!?]+', text)
-    sentences = [s.strip() for s in sentences if len(s.strip()) > 5]
-    words = re.findall(r'\w+', text.lower())
-    
-    if len(words) < 10:
-        return 0, 100 # Слишком мало текста для вывода
-
-    # 1. Анализ вариативности предложений (Люди пишут контрастно)
-    sentence_lengths = [len(s.split()) for s in sentences]
-    if len(sentence_lengths) > 1:
-        avg_len = sum(sentence_lengths) / len(sentence_lengths)
-        variance = sum((x - avg_len) ** 2 for x in sentence_lengths) / len(sentence_lengths)
-    else:
-        variance = 0
-
-    # 2. Анализ уникальности слов
-    unique_ratio = len(set(words)) / len(words)
-
-    # Веса для определения ИИ
-    # ИИ: низкая вариативность (ритм) и средняя уникальность слов
-    ai_score = 40
-    
-    if variance < 12: ai_score += 30 # Монотонный ритм характерный для ИИ
-    if unique_ratio < 0.45: ai_score += 20 # Слишком простой/повторяющийся лексикон
-    
-    # Корректировка границ
-    ai_final = min(max(int(ai_score), 5), 96)
-    return ai_final, 100 - ai_final
-
-# --- ДИЗАЙН (HIGH-END MINIMALISM) ---
+# --- МАКСИМАЛЬНО ЧИСТЫЙ ДИЗАЙН БЕЗ ЛИШНЕГО ТЕКСТА ---
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>AI Detector Elite</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;500;800&display=swap" rel="stylesheet">
+    <title>AI Detector</title>
     <style>
         body {
-            background-color: #000;
+            background-color: #000; /* Полностью черный фон */
             color: #fff;
-            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
         }
-        .container {
+        .main-card {
             width: 100%;
-            max-width: 800px;
-            padding: 40px;
+            max-width: 600px;
             text-align: center;
+            padding: 20px;
         }
         h1 {
-            font-size: 3.5rem;
-            font-weight: 800;
-            letter-spacing: -3px;
-            margin-bottom: 40px;
-            background: linear-gradient(180deg, #fff 0%, #444 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin-bottom: 30px;
         }
-        .input-wrapper {
-            background: #0a0a0a;
-            border: 1px solid #1a1a1a;
-            border-radius: 30px;
-            padding: 20px;
-            transition: all 0.4s ease;
+        .input-area {
+            background: #111;
+            border: 1px solid #222;
+            border-radius: 20px;
+            padding: 15px;
+            transition: 0.3s;
         }
-        .input-wrapper:focus-within {
-            border-color: #333;
-            box-shadow: 0 0 60px rgba(255,255,255,0.02);
+        .input-area:focus-within {
+            border-color: #444;
         }
         textarea {
             width: 100%;
-            height: 300px;
+            height: 200px;
             background: transparent;
             border: none;
             color: #fff;
-            font-size: 1.1rem;
-            line-height: 1.6;
+            font-size: 18px;
             outline: none;
             resize: none;
             font-family: inherit;
         }
-        .btn-main {
-            margin-top: 30px;
+        .check-btn {
+            margin-top: 25px;
             background: #fff;
             color: #000;
             border: none;
-            padding: 18px 60px;
-            border-radius: 100px;
+            padding: 15px 50px;
+            border-radius: 30px;
             font-weight: 600;
-            font-size: 1rem;
+            font-size: 16px;
             cursor: pointer;
-            transition: 0.3s;
+            transition: 0.2s;
         }
-        .btn-main:hover {
-            transform: translateY(-2px);
-            background: #ddd;
-        }
-        .results {
+        .check-btn:hover { background: #ccc; }
+        
+        .result-row {
+            margin-top: 40px;
             display: flex;
-            justify-content: center;
-            gap: 80px;
-            margin-top: 50px;
-            opacity: 0;
-            transform: translateY(20px);
-            transition: 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            justify-content: space-around;
+            opacity: 0; /* Скрыты до нажатия */
+            transition: 0.5s;
         }
-        .results.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
-        .res-box { text-align: center; }
-        .num { font-size: 4rem; font-weight: 800; display: block; }
-        .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 3px; color: #555; }
-        .ai-val { color: #ff3b30; text-shadow: 0 0 30px rgba(255, 59, 48, 0.2); }
-        .human-val { color: #34c759; text-shadow: 0 0 30px rgba(52, 199, 89, 0.2); }
+        .val { font-size: 40px; font-weight: 800; display: block; }
+        .lab { font-size: 11px; text-transform: uppercase; color: #555; letter-spacing: 1px; }
+        .ai { color: #ff3b30; }
+        .human { color: #34c759; }
     </style>
 </head>
 <body>
 
-<div class="container">
+<div class="main-card">
     <h1>AI DETECTOR</h1>
-    <div class="input-wrapper">
-        <textarea id="textInput" placeholder="Вставьте текст и узнайте правду..."></textarea>
+    <div class="input-area">
+        <textarea id="txt" placeholder="Вставьте текст..."></textarea>
     </div>
-    <button class="btn-main" onclick="checkText()">АНАЛИЗ</button>
+    <button class="check-btn" onclick="sendData()">ПРОВЕРИТЬ</button>
 
-    <div id="results" class="results">
-        <div class="res-box">
-            <span id="aiNum" class="num ai-val">0%</span>
-            <span class="label">AI Content</span>
+    <div id="res" class="result-row">
+        <div>
+            <span id="ai_p" class="val ai">0%</span>
+            <span class="lab">Робот</span>
         </div>
-        <div class="res-box">
-            <span id="humanNum" class="num human-val">0%</span>
-            <span class="label">Human Text</span>
+        <div>
+            <span id="hu_p" class="val human">0%</span>
+            <span class="lab">Человек</span>
         </div>
     </div>
 </div>
 
 <script>
-    async function checkText() {
-        const text = document.getElementById('textInput').value;
-        if (text.length < 5) return;
+    async function sendData() {
+        const textValue = document.getElementById('txt').value;
+        if (textValue.trim().length < 5) {
+            alert("Введите текст для анализа");
+            return;
+        }
 
-        const res = await fetch('/analyze', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({text})
-        });
-        const data = await res.json();
-
-        document.getElementById('aiNum').innerText = data.ai + '%';
-        document.getElementById('humanNum').innerText = data.human + '%';
-        document.getElementById('results').classList.add('show');
+        try {
+            const response = await fetch('/analyze', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: textValue})
+            });
+            
+            if (!response.ok) throw new Error('Ошибка сервера');
+            
+            const data = await response.json();
+            
+            // Показываем результат
+            document.getElementById('res').style.opacity = '1';
+            document.getElementById('ai_p').innerText = data.ai + '%';
+            document.getElementById('hu_p').innerText = data.human + '%';
+        } catch (err) {
+            alert("Сервер не отвечает. Запустите файл app.py в терминале!");
+        }
     }
 </script>
 
@@ -171,15 +135,40 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
+# --- ЛОГИКА АНАЛИЗА (БЫСТРАЯ И БЕЗ ОШИБОК) ---
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    text = request.json.get('text', '')
-    ai, human = analyze_text_logic(text)
-    return jsonify({'ai': ai, 'human': human})
+    data = request.json
+    text = data.get('text', '')
+    
+    # 1. Считаем вариативность (Burstiness)
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if len(s) > 2]
+    
+    if len(sentences) < 1:
+        return jsonify({'ai': 0, 'human': 100})
+
+    lens = [len(s.split()) for s in sentences]
+    avg_len = sum(lens) / len(lens)
+    # Если все предложения одной длины — это ИИ
+    variance = sum((x - avg_len) ** 2 for x in lens) / len(lens) if len(lens) > 1 else 0
+
+    # 2. Логика определения
+    ai_prob = 50
+    if variance < 10: ai_prob += 35  # Очень ровный текст
+    if len(set(text.split())) / len(text.split()) < 0.5: ai_prob += 10 # Мало уникальных слов
+    
+    ai_final = min(max(int(ai_prob), 1), 99)
+    
+    return jsonify({
+        'ai': ai_final,
+        'human': 100 - ai_final
+    })
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Порт 5000 может быть занят системой, если не работает — поменяй на 5001
+    app.run(debug=True, port=5000)
