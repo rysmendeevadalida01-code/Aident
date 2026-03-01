@@ -1,0 +1,157 @@
+from flask import Flask, request, jsonify, render_template_string
+import re
+
+app = Flask(__name__)
+
+# --- HTML И ДИЗАЙН (Все в одном) ---
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI vs Human Detector</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --primary: #6366f1;
+            --ai-color: #f43f5e;
+            --human-color: #10b981;
+            --text: #f8fafc;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: var(--card);
+            width: 100%;
+            max-width: 500px;
+            padding: 2.5rem;
+            border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        h1 { text-align: center; font-weight: 600; margin-bottom: 1.5rem; letter-spacing: -1px; }
+        textarea {
+            width: 100%;
+            height: 160px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            color: white;
+            padding: 15px;
+            font-size: 15px;
+            line-height: 1.5;
+            box-sizing: border-box;
+            outline: none;
+            transition: border 0.3s;
+        }
+        textarea:focus { border-color: var(--primary); }
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 20px;
+            border: none;
+            border-radius: 12px;
+            background: var(--primary);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover { transform: translateY(-2px); filter: brightness(1.1); }
+        .results { margin-top: 30px; display: none; animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .stat-row { margin-bottom: 20px; }
+        .label-group { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+        .progress-bg { background: #334155; height: 10px; border-radius: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 0%; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
+        #aiBar { background: var(--ai-color); box-shadow: 0 0 15px rgba(244, 63, 94, 0.4); }
+        #humanBar { background: var(--human-color); box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Detector</h1>
+        <textarea id="textInput" placeholder="Вставьте ваш текст здесь..."></textarea>
+        <button onclick="analyzeText()" id="btn">Проверить текст</button>
+
+        <div id="results" class="results">
+            <div class="stat-row">
+                <div class="label-group"><span>Написано ИИ:</span><span id="aiLabel">0%</span></div>
+                <div class="progress-bg"><div id="aiBar" class="progress-fill"></div></div>
+            </div>
+            <div class="stat-row">
+                <div class="label-group"><span>Человек:</span><span id="humanLabel">0%</span></div>
+                <div class="progress-bg"><div id="humanBar" class="progress-fill"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function analyzeText() {
+            const text = document.getElementById('textInput').value;
+            const btn = document.getElementById('btn');
+            if (text.trim().length < 5) return alert("Введите более длинный текст");
+
+            btn.innerText = "Анализируем...";
+            btn.disabled = true;
+
+            const res = await fetch('/analyze', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text})
+            });
+            const data = await res.json();
+
+            document.getElementById('results').style.display = 'block';
+            setTimeout(() => {
+                document.getElementById('aiBar').style.width = data.ai + '%';
+                document.getElementById('humanBar').style.width = data.human + '%';
+                document.getElementById('aiLabel').innerText = data.ai + '%';
+                document.getElementById('humanLabel').innerText = data.human + '%';
+            }, 100);
+
+            btn.innerText = "Проверить текст";
+            btn.disabled = false;
+        }
+    </script>
+</body>
+</html>
+'''
+
+# --- ЛОГИКА АНАЛИЗА ---
+def get_score(text):
+    words = text.split()
+    # Имитация работы ИИ детектора (базируется на длине слов и сложности)
+    # В реальности тут подключается модель Hugging Face
+    avg_len = sum(len(w) for w in words) / len(words) if words else 0
+    
+    # Нейросети часто пишут очень "средними" по длине словами
+    ai_prob = 50 + (avg_len * 2) if avg_len < 7 else 30
+    ai_prob = min(max(int(ai_prob), 5), 95) # Ограничиваем от 5 до 95%
+    
+    return ai_prob, 100 - ai_prob
+
+@app.route('/')
+def home():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    content = request.json.get('text', '')
+    ai, human = get_score(content)
+    return jsonify({'ai': ai, 'human': human})
+
+if __name__ == '__main__':
+    app.run(debug=True)
