@@ -1,8 +1,9 @@
 from flask import Flask, request, jsonify, render_template_string
+import re
 
 app = Flask(__name__)
 
-# --- МИНИМАЛИСТИЧНЫЙ ДИЗАЙН ---
+# --- МИНИМАЛИСТИЧНЫЙ ИНТЕРФЕЙС (APPLE STYLE) ---
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="ru">
@@ -10,135 +11,129 @@ HTML_TEMPLATE = '''
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Detector</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg: #050505;
-            --accent: #ffffff;
-            --card: #111111;
-        }
+        * { box-sizing: border-box; }
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg);
-            color: var(--accent);
             margin: 0;
+            padding: 0;
+            background: #000000;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             overflow: hidden;
         }
-        .main-wrapper {
+        .container {
             width: 100%;
-            max-width: 700px;
+            max-width: 650px;
             text-align: center;
             padding: 20px;
+            z-index: 2;
         }
         h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: 2rem;
+            font-weight: 800;
+            font-size: 3rem;
+            margin-bottom: 30px;
             letter-spacing: -2px;
+            background: linear-gradient(to right, #fff, #444);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        .input-container {
-            position: relative;
-            background: var(--card);
+        .editor-box {
+            background: #111;
             border: 1px solid #222;
-            border-radius: 20px;
-            padding: 10px;
-            transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 24px;
+            padding: 8px;
+            transition: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .input-container:focus-within {
-            border-color: #444;
-            box-shadow: 0 0 40px rgba(255,255,255,0.05);
+        .editor-box:focus-within {
+            border-color: #555;
+            box-shadow: 0 0 50px rgba(255,255,255,0.03);
         }
         textarea {
             width: 100%;
-            height: 200px;
+            height: 250px;
             background: transparent;
             border: none;
-            color: white;
-            padding: 15px;
+            color: #eee;
+            padding: 20px;
             font-size: 18px;
+            line-height: 1.6;
             resize: none;
             outline: none;
-            box-sizing: border-box;
             font-family: inherit;
         }
-        button {
-            background: var(--accent);
-            color: black;
+        .btn-check {
+            margin-top: 25px;
+            background: #ffffff;
+            color: #000;
             border: none;
-            padding: 12px 30px;
-            border-radius: 12px;
+            padding: 16px 45px;
+            border-radius: 50px;
             font-weight: 600;
             font-size: 16px;
             cursor: pointer;
-            margin-top: 20px;
             transition: 0.2s;
         }
-        button:hover {
-            transform: scale(1.02);
-            background: #e0e0e0;
+        .btn-check:hover {
+            transform: scale(1.05);
+            background: #cccccc;
         }
-        .results {
+        /* Результаты строго по центру под кнопкой */
+        .result-overlay {
             margin-top: 40px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 50px;
             opacity: 0;
+            transform: translateY(10px);
             transition: 0.5s ease;
         }
-        .res-card {
-            background: var(--card);
-            padding: 20px;
-            border-radius: 15px;
-            border: 1px solid #222;
-        }
-        .percent {
-            font-size: 32px;
-            font-weight: 700;
+        .res-item { text-align: center; }
+        .res-value {
+            font-size: 48px;
+            font-weight: 800;
             display: block;
+            margin-bottom: 5px;
         }
-        .label {
+        .res-label {
             font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 2px;
             color: #666;
         }
-        .ai-text { color: #ff4757; }
-        .human-text { color: #2ed573; }
+        .ai-color { color: #ff3b30; }
+        .human-color { color: #34c759; }
     </style>
 </head>
 <body>
 
-<div class="main-wrapper">
+<div class="container">
     <h1>AI DETECTOR</h1>
-    <div class="input-container">
-        <textarea id="text" placeholder="Просто вставьте текст..."></textarea>
+    <div class="editor-box">
+        <textarea id="mainInput" placeholder="Вставьте текст для анализа..."></textarea>
     </div>
-    <button onclick="check()">ПРОВЕРИТЬ</button>
+    <button class="btn-check" onclick="runAnalysis()">АНАЛИЗ</button>
 
-    <div id="res" class="results">
-        <div class="res-card">
-            <span class="label">Робот</span>
-            <span id="ai" class="percent ai-text">0%</span>
+    <div id="resPanel" class="result-overlay">
+        <div class="res-item">
+            <span id="aiValue" class="res-value ai-color">0%</span>
+            <span class="res-label">Робот</span>
         </div>
-        <div class="res-card">
-            <span class="label">Человек</span>
-            <span id="human" class="percent human-text">0%</span>
+        <div class="res-item">
+            <span id="humanValue" class="res-value human-color">0%</span>
+            <span class="res-label">Человек</span>
         </div>
     </div>
 </div>
 
 <script>
-    async function check() {
-        const text = document.getElementById('text').value;
-        if (text.length < 5) return;
-
-        // "Мгновенный" ответ для пользователя
-        const resDiv = document.getElementById('res');
-        resDiv.style.opacity = '1';
+    async function runAnalysis() {
+        const text = document.getElementById('mainInput').value;
+        if (text.trim().length < 10) return alert("Текст слишком короткий");
 
         const response = await fetch('/analyze', {
             method: 'POST',
@@ -148,8 +143,12 @@ HTML_TEMPLATE = '''
         
         const data = await response.json();
         
-        document.getElementById('ai').innerText = data.ai + '%';
-        document.getElementById('human').innerText = data.human + '%';
+        const panel = document.getElementById('resPanel');
+        panel.style.opacity = '1';
+        panel.style.transform = 'translateY(0)';
+        
+        document.getElementById('aiValue').innerText = data.ai + '%';
+        document.getElementById('humanValue').innerText = data.human + '%';
     }
 </script>
 
@@ -157,29 +156,50 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-# --- ЛОГИКА (УЛЬТРА-БЫСТРАЯ) ---
+# --- УЛУЧШЕННЫЙ АЛГОРИТМ АНАЛИЗА ---
 @app.route('/')
-def home():
+def index():
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
     text = request.json.get('text', '')
+    words = re.findall(r'\w+', text.lower())
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if len(s.strip()) > 2]
     
-    # Алгоритм мгновенного анализа вариативности
-    words = text.split()
-    if not words: return jsonify({'ai': 0, 'human': 0})
+    if not words or not sentences:
+        return jsonify({'ai': 0, 'human': 100})
+
+    # 1. Анализ уникальности слов (TTR - Type-Token Ratio)
+    # ИИ часто использует ограниченный набор "идеальных" слов.
+    unique_ratio = len(set(words)) / len(words)
     
-    unique_words = len(set(words)) / len(words)
-    avg_word_len = sum(len(w) for w in words) / len(words)
+    # 2. Анализ вариативности длины предложений (Burstiness)
+    # Человек пишет: "Коротко. Потом очень длинно и витиевато. Опять коротко."
+    # ИИ пишет: "Среднее предложение. Еще одно среднее. И еще одно."
+    lens = [len(s.split()) for s in sentences]
+    avg_len = sum(lens) / len(lens)
+    variance = sum((x - avg_len) ** 2 for x in lens) / len(lens) if len(lens) > 1 else 0
     
-    # ИИ обычно использует меньше уникальных слов и среднюю длину 5.2
-    if 4.5 < avg_word_len < 6.0 and unique_words < 0.6:
-        ai_score = 82
-    else:
-        ai_score = 14
-        
-    return jsonify({'ai': ai_score, 'human': 100 - ai_score})
+    # Расчет вероятности (упрощенная модель детекции)
+    ai_score = 50
+    
+    # Если вариативность низкая (скучный ритм) -> это ИИ
+    if variance < 15: ai_score += 25
+    else: ai_score -= 15
+    
+    # Если словарный запас бедный -> это ИИ
+    if unique_ratio < 0.5: ai_score += 20
+    else: ai_score -= 10
+
+    # Финальные границы
+    ai_score = min(max(int(ai_score), 2), 98)
+    
+    return jsonify({
+        'ai': ai_score,
+        'human': 100 - ai_score
+    })
 
 if __name__ == '__main__':
     app.run(debug=True)
