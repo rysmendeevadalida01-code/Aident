@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Elite AI Detector</title>
+    <style>
+        /* 1. ПОЛНОЕ УДАЛЕНИЕ ФОНОВОГО ТЕКСТА И БУКВ */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000000; /* Глубокий черный */
+            color: #ffffff;
+            font-family: 'Segoe UI', Helvetica, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* 2. ЦЕНТРИРОВАННЫЙ КОНТЕЙНЕР */
+        .app-container {
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            letter-spacing: -1px;
+            margin-bottom: 40px;
+            font-weight: 700;
+        }
+
+        /* 3. ПОЛЕ ВВОДА В СЕРЕДИНЕ */
+        .input-box {
+            background: #111;
+            border: 1px solid #222;
+            border-radius: 24px;
+            padding: 20px;
+            margin-bottom: 30px;
+            transition: 0.3s;
+        }
+
+        .input-box:focus-within {
+            border-color: #444;
+            box-shadow: 0 0 30px rgba(255,255,255,0.05);
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 18px;
+            outline: none;
+            resize: none;
+            font-family: inherit;
+            line-height: 1.5;
+        }
+
+        /* 4. КНОПКА */
+        button {
+            background: #fff;
+            color: #000;
+            border: none;
+            padding: 16px 50px;
+            border-radius: 40px;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #ccc;
+            transform: translateY(-2px);
+        }
+
+        /* 5. РЕЗУЛЬТАТЫ */
+        .result-panel {
+            margin-top: 50px;
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            visibility: hidden; /* Скрыто до нажатия */
+            opacity: 0;
+            transition: 0.6s;
+        }
+
+        .res-item { text-align: center; }
+        
+        .percent {
+            font-size: 50px;
+            font-weight: 800;
+            display: block;
+        }
+
+        .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #555;
+            margin-top: 10px;
+        }
+
+        .ai-color { color: #ff3b30; }
+        .human-color { color: #34c759; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <h1>AI DETECTOR</h1>
+        
+        <div class="input-box">
+            <textarea id="userInput" placeholder="Вставьте текст для мгновенной проверки..."></textarea>
+        </div>
+
+        <button onclick="detectAI()">ПРОВЕРИТЬ</button>
+
+        <div id="resultArea" class="result-panel">
+            <div class="res-item">
+                <span id="aiNum" class="percent ai-color">0%</span>
+                <span class="label">Робот</span>
+            </div>
+            <div class="res-item">
+                <span id="humanNum" class="percent human-color">0%</span>
+                <span class="label">Человек</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function detectAI() {
+            const text = document.getElementById('userInput').value;
+            
+            if (text.trim().length < 10) {
+                alert("Пожалуйста, введите текст подлиннее.");
+                return;
+            }
+
+            // МГНОВЕННЫЙ АНАЛИЗ (Логика внутри браузера)
+            const words = text.trim().split(/\s+/);
+            const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+            
+            // Анализ вариативности (Люди пишут предложения разной длины)
+            let variance = 0;
+            if (sentences.length > 1) {
+                const lens = sentences.map(s => s.trim().split(/\s+/).length);
+                const avg = lens.reduce((a, b) => a + b) / lens.length;
+                variance = lens.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lens.length;
+            }
+
+            // Роботы пишут слишком "ровно" (variance < 15)
+            let aiProb = 50;
+            if (variance < 10) aiProb += 30; 
+            if (variance > 30) aiProb -= 20;
+            
+            // Уникальность слов
+            const uniqueRatio = new Set(words).size / words.length;
+            if (uniqueRatio < 0.5) aiProb += 15;
+
+            // Ограничения
+            const finalAI = Math.min(Math.max(Math.round(aiProb), 2), 98);
+            const finalHuman = 100 - finalAI;
+
+            // ПОКАЗ РЕЗУЛЬТАТА
+            const panel = document.getElementById('resultArea');
+            panel.style.visibility = 'visible';
+            panel.style.opacity = '1';
+            
+            document.getElementById('aiNum').innerText = finalAI + '%';
+            document.getElementById('humanNum').innerText = finalHuman + '%';
+        }
+    </script>
+</body>
+</html>
