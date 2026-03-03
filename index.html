@@ -1,10 +1,40 @@
-# --- ДИЗАЙН (CYBER BLUE EDITION) ---
+from flask import Flask, request, jsonify, render_template_string
+import re
+
+app = Flask(__name__)
+
+# --- ЛОГИКА АНАЛИЗА ---
+def analyze_text_logic(text):
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if len(s.strip()) > 5]
+    words = re.findall(r'\w+', text.lower())
+    
+    if len(words) < 10:
+        return 0, 100 
+
+    sentence_lengths = [len(s.split()) for s in sentences]
+    if len(sentence_lengths) > 1:
+        avg_len = sum(sentence_lengths) / len(sentence_lengths)
+        variance = sum((x - avg_len) ** 2 for x in sentence_lengths) / len(sentence_lengths)
+    else:
+        variance = 0
+
+    unique_ratio = len(set(words)) / len(words)
+    ai_score = 40
+    
+    if variance < 12: ai_score += 30 
+    if unique_ratio < 0.45: ai_score += 20 
+    
+    ai_final = min(max(int(ai_score), 5), 96)
+    return ai_final, 100 - ai_final
+
+# --- ДИЗАЙН (CYBER BLUE) ---
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>AI Detector Pro | Blue</title>
+    <title>AI Detector Pro</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;500;800&display=swap" rel="stylesheet">
     <style>
         body {
@@ -18,111 +48,52 @@ HTML_TEMPLATE = '''
             height: 100vh;
             background-image: radial-gradient(circle at 50% 50%, #0a1931 0%, #050a15 100%);
         }
-        .container {
-            width: 100%;
-            max-width: 850px;
-            padding: 40px;
-            text-align: center;
-        }
+        .container { width: 100%; max-width: 800px; padding: 40px; text-align: center; }
         h1 {
-            font-size: 3.5rem;
-            font-weight: 800;
-            letter-spacing: -2px;
-            margin-bottom: 40px;
+            font-size: 3.5rem; font-weight: 800; letter-spacing: -2px; margin-bottom: 40px;
             background: linear-gradient(180deg, #fff 30%, #3a86ff 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
         .input-wrapper {
-            background: rgba(10, 25, 49, 0.6);
-            border: 1px solid #1e3a5f;
-            border-radius: 24px;
-            padding: 25px;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            backdrop-filter: blur(10px);
-        }
-        .input-wrapper:focus-within {
-            border-color: #3a86ff;
-            box-shadow: 0 0 40px rgba(58, 134, 255, 0.15);
+            background: rgba(10, 25, 49, 0.6); border: 1px solid #1e3a5f;
+            border-radius: 24px; padding: 25px; backdrop-filter: blur(10px);
         }
         textarea {
-            width: 100%;
-            height: 250px;
-            background: transparent;
-            border: none;
-            color: #fff;
-            font-size: 1.1rem;
-            line-height: 1.6;
-            outline: none;
-            resize: none;
-            font-family: inherit;
+            width: 100%; height: 200px; background: transparent; border: none;
+            color: #fff; font-size: 1.1rem; outline: none; resize: none; font-family: inherit;
         }
-        textarea::placeholder { color: #4a6a8a; }
-        
         .btn-main {
-            margin-top: 35px;
-            background: #3a86ff;
-            color: #fff;
-            border: none;
-            padding: 18px 70px;
-            border-radius: 100px;
-            font-weight: 700;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: 0.3s;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 10px 25px rgba(58, 134, 255, 0.3);
+            margin-top: 30px; background: #3a86ff; color: #fff; border: none;
+            padding: 18px 60px; border-radius: 100px; font-weight: 700;
+            cursor: pointer; transition: 0.3s; box-shadow: 0 10px 20px rgba(58, 134, 255, 0.3);
         }
-        .btn-main:hover {
-            transform: translateY(-3px);
-            background: #4d94ff;
-            box-shadow: 0 15px 30px rgba(58, 134, 255, 0.4);
-        }
+        .btn-main:hover { transform: translateY(-2px); background: #4d94ff; }
         .results {
-            display: flex;
-            justify-content: center;
-            gap: 100px;
-            margin-top: 50px;
-            opacity: 0;
-            transform: translateY(30px);
-            transition: 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .results.show {
-            opacity: 1;
-            transform: translateY(0);
+            display: flex; justify-content: center; gap: 80px; margin-top: 50px;
+            display: none; /* Скрыто по умолчанию */
         }
         .res-box { text-align: center; }
-        .num { font-size: 4.5rem; font-weight: 800; display: block; line-height: 1; }
-        .label { 
-            font-size: 0.75rem; 
-            text-transform: uppercase; 
-            letter-spacing: 4px; 
-            color: #6482a6; 
-            margin-top: 15px; 
-            display: block;
-        }
-        .ai-val { color: #3a86ff; text-shadow: 0 0 40px rgba(58, 134, 255, 0.4); }
-        .human-val { color: #00f2ff; text-shadow: 0 0 40px rgba(0, 242, 255, 0.3); }
+        .num { font-size: 4rem; font-weight: 800; display: block; }
+        .ai-val { color: #3a86ff; }
+        .human-val { color: #00f2ff; }
+        .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: #6482a6; }
     </style>
 </head>
 <body>
-
 <div class="container">
     <h1>AI DETECTOR</h1>
     <div class="input-wrapper">
-        <textarea id="textInput" placeholder="Введите текст для глубокого анализа..."></textarea>
+        <textarea id="textInput" placeholder="Вставьте текст..."></textarea>
     </div>
-    <button class="btn-main" onclick="checkText()">Запустить анализ</button>
-
+    <button class="btn-main" onclick="checkText()">ЗАПУСТИТЬ АНАЛИЗ</button>
     <div id="results" class="results">
         <div class="res-box">
             <span id="aiNum" class="num ai-val">0%</span>
-            <span class="label">AI Probability</span>
+            <span class="label">AI Content</span>
         </div>
         <div class="res-box">
             <span id="humanNum" class="num human-val">0%</span>
-            <span class="label">Human Score</span>
+            <span class="label">Human Text</span>
         </div>
     </div>
 </div>
@@ -130,21 +101,42 @@ HTML_TEMPLATE = '''
 <script>
     async function checkText() {
         const text = document.getElementById('textInput').value;
-        if (text.length < 10) return;
+        if (text.length < 5) {
+            alert("Текст слишком короткий");
+            return;
+        }
 
-        const res = await fetch('/analyze', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({text})
-        });
-        const data = await res.json();
+        try {
+            const res = await fetch('/analyze', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text})
+            });
+            const data = await res.json();
 
-        document.getElementById('aiNum').innerText = data.ai + '%';
-        document.getElementById('humanNum').innerText = data.human + '%';
-        document.getElementById('results').classList.add('show');
+            document.getElementById('aiNum').innerText = data.ai + '%';
+            document.getElementById('humanNum').innerText = data.human + '%';
+            document.getElementById('results').style.display = 'flex';
+        } catch (e) {
+            alert("Ошибка соединения с сервером");
+        }
     }
 </script>
-
 </body>
 </html>
 '''
+
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    data = request.get_json()
+    text = data.get('text', '')
+    ai, human = analyze_text_logic(text)
+    return jsonify({'ai': ai, 'human': human})
+
+# ВАЖНО: правильный блок запуска
+if __name__ == '__main__':
+    app.run(debug=True)
